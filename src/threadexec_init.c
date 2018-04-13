@@ -123,6 +123,7 @@ kill_threads(task_t task) {
 
 void
 threadexec_deinit(threadexec_t threadexec) {
+	assert(threadexec != NULL);
 #if TX_HAVE_THREAD_API
 	bool done = false;
 	if (tx_supports_task_api(threadexec)) {

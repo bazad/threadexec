@@ -110,95 +110,11 @@ init_by_hijacking_thread(threadexec_t threadexec) {
 static bool
 init_without_thread(threadexec_t threadexec) {
 	DEBUG_TRACE(1, "Performing temporary thread hijacking");
-	WARNING("NOT IMPLEMENTED");//TODO: This implementation is broken and I haven't debugged it.
-	assert(threadexec->thread == MACH_PORT_NULL);
-	assert((threadexec->flags & (TX_SUSPEND | TX_PRESERVE | TX_RESUME | TX_KILL_THREAD)) == 0);
-	// First pick a thread to hijack. The thread is not suspended.
-	thread_t hijack = pick_hijack_thread(threadexec->task);
-	if (hijack == MACH_PORT_NULL) {
-		ERROR("Could not hijack a thread in task 0x%x", threadexec->task);
-		goto fail_0;
-	}
-	// Now set the TX_SUSPEND, TX_PRESERVE, and TX_RESUME flags and initialize. This will hit
-	// init_with_thread(). If this fails then tx_deinit_with_thread_api() and
-	// tx_preserve_restore() will be called, but the ports themselves will not be deallocated.
-	// This means the only cleanup we need to do is deallocate the hijack thread.
-	threadexec->thread = hijack;
-	threadexec->flags |= TX_SUSPEND | TX_PRESERVE | TX_RESUME;
-	bool ok = tx_init_internal(threadexec);
-	if (!ok) {
-		ERROR("Thread hijacking failed");
-		goto fail_1;
-	}
-	DEBUG_TRACE(1, "Successfully initialized with existing thread 0x%x", hijack);
-	// Alright, we successfully initialized! Now use the working threadexec to create a new
-	// thread. We'll give ourselves 4 seconds to find it before it exits on its own.
-	int ret;
-	pthread_t pthread_r;
-	ok = threadexec_call_cv(threadexec, &ret, sizeof(ret),
-			pthread_create_suspended_np, 4,
-			TX_CARG_PTR_LITERAL_OUT(pthread_t *,       &pthread_r),
-			TX_CARG_LITERAL        (pthread_attr_t *,  NULL      ),
-			TX_CARG_LITERAL        (void *(*)(void *), abort     ),
-			TX_CARG_LITERAL        (void *,            0         ));
-	if (!ok) {
-		ERROR_REMOTE_CALL(pthread_create);
-		goto fail_2;
-	}
-	if (ret != 0) {
-		ERROR_REMOTE_CALL_FAIL(pthread_create, "%u", ret);
-		goto fail_2;
-	}
-	// Detach the thread.
-	threadexec_call_cv(threadexec, NULL, 0,
-			pthread_detach, 1,
-			TX_CARG_LITERAL(pthread_t, pthread_r));
-	// Get the Mach port for that thread.
-	mach_port_t thread_r;
-	ok = threadexec_call_cv(threadexec, &thread_r, sizeof(thread_r),
-			pthread_mach_thread_np, 1,
-			TX_CARG_LITERAL(pthread_t, pthread_r));
-	if (!ok) {
-		ERROR_REMOTE_CALL(pthread_mach_thread_np);
-		goto fail_2;
-	}
-	DEBUG_TRACE(2, "Created remote thread 0x%x", thread_r);
-	// Copy the thread port into our IPC space.
-	mach_port_t thread;
-	ok = threadexec_mach_port_extract(threadexec, thread_r, &thread, MACH_MSG_TYPE_COPY_SEND);
-	if (!ok) {
-		ERROR("Could not copy remote thread port");
-		goto fail_2;
-	}
-	DEBUG_TRACE(2, "Got local port to created thread: 0x%x", thread);
-	// Restore the state of the original thread and resume it. The threadexec object cannot be
-	// used for calls after this operation!
-	tx_preserve_restore(threadexec);
-	thread_resume_check(hijack);
-	mach_port_deallocate(mach_task_self(), hijack);
-	threadexec->flags &= ~(TX_SUSPEND | TX_PRESERVE | TX_RESUME);
-	// Replace the original thread with the new one, once again making the threadexec valid for
-	// calls. We will kill the thread in threadexec_deinit().
-	threadexec->thread = thread;
-	threadexec->thread_remote = thread_r;
-	threadexec->flags |= TX_KILL_THREAD; // TODO: Maybe a call to pthread_exit() is better.
-	// Now set the pthread context for the thread.
-	ok = threadexec_call_cv(threadexec, NULL, 0,
-			_pthread_set_self, 1,
-			TX_CARG_LITERAL(pthread_t, pthread_r));
-	if (!ok) {
-		ERROR_REMOTE_CALL(_pthread_set_self);
-		goto fail_2;
-	}
-	// Success!
-	return true;
-fail_2:
-	tx_deinit_with_thread_api(threadexec);
-fail_1:
-	mach_port_deallocate(mach_task_self(), hijack);
-	threadexec->thread = MACH_PORT_NULL;
-	threadexec->flags &= ~(TX_SUSPEND | TX_PRESERVE | TX_RESUME);
-fail_0:
+	ERROR("NOT IMPLEMENTED"); // TODO: There used to be a partial implementation here.
+	// Go back to the initial commit to retrieve it.
+	// TODO: The issue is that prior implementations would sometimes cause spurious crashes in
+	// the hijacked thread after it was resumed. This proved tricky to resolve and I eventually
+	// gave up on it since this code path isn't used in blanket.
 	return false;
 }
 
@@ -222,17 +138,11 @@ tx_deinit_with_thread_api(threadexec_t threadexec) {
 		// Don't bother deallocating the remote memory if we're killing the task.
 		if (threadexec->shmem_remote != 0 && (threadexec->flags & TX_KILL_TASK) == 0) {
 			DEBUG_TRACE(2, "Deallocating remote shared memory");
-			WARNING("NOT IMPLEMENTED");//TODO
-			// TODO: Here's a problem: We can't deallocate the memory that is our
+			WARNING("NOT IMPLEMENTED"); // TODO: There used to be an incorrect version.
+			// Go back to the initial commit to retrieve it.
+			// TODO: The problem is we can't deallocate the memory that is our
 			// stack or we'll crash! Therefore we need to save the old SP before we set
 			// it (implicitly) with a call to thread_call_stack().
-			word_t mvd_args[3] = {
-				threadexec->task_remote, threadexec->shmem_remote,
-				threadexec->shmem_size
-			};
-			tx_call_regs(threadexec, NULL, 0,
-					(word_t) mach_vm_deallocate, 3, mvd_args);
-			threadexec->shmem_remote = 0;
 		}
 		if (threadexec->shmem != NULL) {
 			DEBUG_TRACE(2, "Deallocating local shared memory");
