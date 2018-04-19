@@ -2,28 +2,34 @@
 
 #if TX_HAVE_THREAD_API
 
+#include "tx_pthread.h"
 #include "tx_call.h"
 #include "tx_log.h"
 #include "tx_prototypes.h"
+#include "tx_pthread.h"
 #include "tx_utils.h"
 #include "thread_api/tx_stage0_mach_ports.h"
 #include "thread_api/tx_stage1_shared_memory.h"
 
 #include <assert.h>
 #include <stdlib.h>
-#include <pthread.h>
 #include <unistd.h>
-
-// _pthread_set_self() initializes thread-local storage.
-extern void _pthread_set_self(pthread_t);
 
 // Perform straightforward initialization using a supplied thread port.
 static bool
 init_with_thread(threadexec_t threadexec) {
 	DEBUG_TRACE(1, "Using thread 0x%x", threadexec->thread);
 	assert(threadexec->thread != MACH_PORT_NULL);
+	// Perform pthread setup if this is a bare thread.
+	bool ok;
+	if (threadexec->flags & TX_BARE_THREAD) {
+		ok = tx_pthread_init_bare_thread(threadexec);
+		if (!ok) {
+			goto fail;
+		}
+	}
 	// Set up Mach ports to send messages between this task and the remote thread.
-	bool ok = tx_stage0_init_mach_ports(threadexec);
+	ok = tx_stage0_init_mach_ports(threadexec);
 	if (!ok) {
 		goto fail;
 	}

@@ -5,12 +5,14 @@
 #include "tx_log.h"
 #include "tx_params.h"
 #include "tx_prototypes.h"
+#include "tx_pthread.h"
 #include "tx_utils.h"
 
 #include <assert.h>
 
 // Try using the task APIs to create a new thread in the task for use by threadexec. The thread is
-// returned empty and suspended.
+// returned empty, bare, and suspended. We will need to initialize shared memory for its stack
+// before it can be used to call functions.
 static thread_t
 create_thread(task_t task) {
 	thread_t thread;
@@ -29,7 +31,7 @@ create_thread(task_t task) {
 }
 
 // Set up the shared memory region. This is easy to do with the task API and doesn't require the
-// Mach ports.
+// Mach ports or function calling.
 static bool
 initialize_shared_memory(threadexec_t threadexec) {
 	bool success = false;
@@ -122,7 +124,7 @@ tx_init_with_task_api(threadexec_t threadexec) {
 		if (threadexec->thread == MACH_PORT_NULL) {
 			goto fail_0;
 		}
-		threadexec->flags |= TX_KILL_THREAD;
+		threadexec->flags |= TX_KILL_THREAD | TX_BARE_THREAD;
 	}
 	// First try to set up the remote port. This will tell us whether the task_api is
 	// supported.
@@ -134,6 +136,13 @@ tx_init_with_task_api(threadexec_t threadexec) {
 	ok = initialize_shared_memory(threadexec);
 	if (!ok) {
 		goto fail_1;
+	}
+	// If this is a bare thread, promote it to a full pthread.
+	if (threadexec->flags & TX_BARE_THREAD) {
+		ok = tx_pthread_init_bare_thread(threadexec);
+		if (!ok) {
+			goto fail_1;
+		}
 	}
 	// Now set up the local Mach port. We need to do this after we initialize the shared memory
 	// region because it relies on function calling.

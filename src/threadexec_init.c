@@ -14,7 +14,7 @@
 	(TX_KILL_THREAD | TX_KILL_TASK)
 
 #define SUPPORTED_FLAGS	\
-	(KILL_FLAGS | TX_SUSPEND | TX_RESUME | TX_BORROW_PORTS)
+	(KILL_FLAGS | TX_SUSPEND | TX_RESUME | TX_BORROW_PORTS | TX_BARE_THREAD)
 
 bool
 tx_init_internal(threadexec_t threadexec) {
@@ -81,9 +81,9 @@ threadexec_init(task_t task, thread_t thread, tx_create_flags_t flags) {
 	// We can't both kill and resume.
 	assert((flags & KILL_FLAGS) == 0 || (flags & TX_RESUME) == 0);
 	// If we have no thread, then it makes no sense to suspend it now or resume or kill it at
-	// the end.
+	// the end or to borrow the port or claim that the thread is bare.
 	assert(thread != MACH_PORT_NULL || (flags & (TX_SUSPEND | TX_RESUME | TX_KILL_THREAD |
-					TX_BORROW_THREAD_PORT)) == 0);
+					TX_BORROW_THREAD_PORT | TX_BARE_THREAD)) == 0);
 	// Set TX_PRESERVE unless we are killing the thread on exit.
 	if (thread != MACH_PORT_NULL && (flags & KILL_FLAGS) == 0) {
 		flags |= TX_PRESERVE;

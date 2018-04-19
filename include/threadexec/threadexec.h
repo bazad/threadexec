@@ -159,6 +159,9 @@ enum {
 	TX_BORROW_TASK_PORT   = 0x40,
 	// Both TX_BORROW_THREAD_PORT and TX_BORROW_TASK_PORT.
 	TX_BORROW_PORTS       = TX_BORROW_THREAD_PORT | TX_BORROW_TASK_PORT,
+	// The thread port is a bare Mach thread with no associated pthread state. Use this flag
+	// for a thread created via thread_create().
+	TX_BARE_THREAD        = 0x80,
 };
 
 typedef uint32_t tx_create_flags_t;

@@ -44,6 +44,7 @@ THREADEXEC_SRCS = $(THREADEXEC_ARCH_SRCS) \
 		  tx_call.c \
 		  tx_init_shmem.c \
 		  tx_log.c \
+		  tx_pthread.c \
 		  tx_utils.c
 
 THREADEXEC_HDRS = $(THREADEXEC_ARCH_HDRS) \
@@ -59,6 +60,7 @@ THREADEXEC_HDRS = $(THREADEXEC_ARCH_HDRS) \
 		  tx_log.h \
 		  tx_params.h \
 		  tx_prototypes.h \
+		  tx_pthread.h \
 		  tx_utils.h
 
 THREADEXEC_INCS = $(THREADEXEC_ARCH_INCS) \
