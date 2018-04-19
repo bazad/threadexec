@@ -111,10 +111,10 @@ static bool
 init_without_thread(threadexec_t threadexec) {
 	DEBUG_TRACE(1, "Performing temporary thread hijacking");
 	ERROR("NOT IMPLEMENTED"); // TODO: There used to be a partial implementation here.
-	// Go back to the initial commit to retrieve it.
-	// TODO: The issue is that prior implementations would sometimes cause spurious crashes in
-	// the hijacked thread after it was resumed. This proved tricky to resolve and I eventually
-	// gave up on it since this code path isn't used in blanket.
+	// TODO: The issue appears to be that the suspend/abort/get_state/set_state/resume sequence
+	// doesn't actually perfectly preserve the state of the original thread. Thus, even after
+	// setting the state to identically match the original state, the thread will sometimes
+	// crash on resume. Unfortunately I don't know any way around this.
 	return false;
 }
 
@@ -125,6 +125,9 @@ tx_init_with_thread_api(threadexec_t threadexec) {
 	if (threadexec->thread != MACH_PORT_NULL) {
 		return init_with_thread(threadexec);
 	} else if (threadexec->flags & TX_KILL_TASK) {
+		// The above condition isn't exactly correct: it should really be: "hijack a thread
+		// permanently if the user doesn't care about maintaining the integrity of the
+		// process", which is even more strict than TX_KILL_TASK.
 		return init_by_hijacking_thread(threadexec);
 	} else {
 		return init_without_thread(threadexec);

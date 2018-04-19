@@ -53,7 +53,8 @@ thread_save_state_arm64(thread_act_t thread) {
 	kr = thread_get_state(thread, ARM_THREAD_STATE64, (thread_state_t) &s->thread, &count);
 	s->thread_valid = (kr == KERN_SUCCESS);
 	if (kr != KERN_SUCCESS) {
-		WARNING("%s: Failed to save %s state: %u", __func__, "ARM_THREAD_STATE64", kr);
+		ERROR("%s: Failed to save %s state: %u", __func__, "ARM_THREAD_STATE64", kr);
+		goto fail;
 	}
 	// ARM_EXCEPTION_STATE64
 	count = ARM_EXCEPTION_STATE64_COUNT;
@@ -94,6 +95,7 @@ thread_save_state_arm64(thread_act_t thread) {
 	s->thread.__sp += STACK_SKIP;
 	if (kr != KERN_SUCCESS) {
 		ERROR("%s: Failed to set new %s state: %u", __func__, "ARM_THREAD_STATE64", kr);
+fail:
 		free(s);
 		s = NULL;
 	}
