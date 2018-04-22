@@ -37,6 +37,7 @@ THREADEXEC_SRCS = $(THREADEXEC_ARCH_SRCS) \
 		  thread_call.c \
 		  threadexec_base.c \
 		  threadexec_call.c \
+		  threadexec_file.c \
 		  threadexec_init.c \
 		  threadexec_mach_port.c \
 		  threadexec_read_write.c \

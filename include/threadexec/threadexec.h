@@ -1,6 +1,7 @@
 #ifndef THREADEXEC__THREADEXEC_H_
 #define THREADEXEC__THREADEXEC_H_
 
+#include <fcntl.h>
 #include <mach/mach.h>
 #include <stdarg.h>
 #include <stdbool.h>
@@ -132,7 +133,7 @@ struct threadexec_call_c_argument {
 	TX_CARG_PTR_DATA_INOUT(type, local_ptr_literal, sizeof(*((type)NULL)))
 
 #define TX_CARG_CSTRING(type, local_cstring)				\
-	({ __typeof__(local_cstring) _local_cstring = (local_cstring);	\
+	({ const char *_local_cstring = (local_cstring);		\
 	   TX_CARG_PTR_DATA_IN(type, _local_cstring, strlen(_local_cstring) + 1); })
 
 // The threadexec_init() creation flags.
@@ -584,6 +585,70 @@ bool threadexec_mach_port_insert(threadexec_t threadexec,
  */
 bool threadexec_mach_port_deallocate(threadexec_t threadexec,
 		mach_port_t remote_port_name);
+
+/*
+ * threadexec_file_insert
+ *
+ * Description:
+ * 	Insert the specified local file into the threadexec process.
+ *
+ * Parameters:
+ * 	threadexec			The threadexec context.
+ * 	local_fd			The local file descriptor of the file to send to the remote
+ * 					process.
+ * 	remote_fd		out	On return, the remote process's file descriptor for the
+ * 					file.
+ *
+ * Returns:
+ * 	Returns true on success.
+ *
+ * TODO:
+ * 	Not implemented.
+ */
+bool threadexec_file_insert(threadexec_t threadexec, int local_fd, int *remote_fd);
+
+/*
+ * threadexec_file_extract
+ *
+ * Description:
+ * 	Copy a file in the threadexec process to the local process.
+ *
+ * Parameters:
+ * 	threadexec			The threadexec context.
+ * 	remote_fd			The file descriptor of the file in the remote process to
+ * 					copy.
+ * 	local_fd		out	On return, the file descriptor for the file in the local
+ * 					process.
+ *
+ * Returns:
+ * 	Returns true on success.
+ */
+bool threadexec_file_extract(threadexec_t threadexec, int remote_fd, int *local_fd);
+
+/*
+ * threadexec_file_open
+ *
+ * Description:
+ * 	Open a file in a threadexec process. If remote_fd is NULL, then the file is closed in the
+ * 	remote process. If local_fd is not NULL, then the file is copied to the local process.
+ *
+ * Parameters:
+ * 	threadexec			The threadexec context.
+ * 	path				The path of the file to open.
+ * 	oflags				Flags to open().
+ * 	mode				The open() mode.
+ * 	remote_fd		out	If not NULL, on return, the file descriptor for the opened
+ * 					file in the threadexec process. If NULL, the remote file
+ * 					descriptor is closed.
+ * 	local_fd			If not NULL, on return, the file descriptor for the opened
+ * 					file in the local process. If NULL, the remote file is not
+ * 					copied to the local process.
+ *
+ * Returns:
+ * 	Returns true on success.
+ */
+bool threadexec_file_open(threadexec_t threadexec, const char *path, int oflags, mode_t mode,
+		int *remote_fd, int *local_fd);
 
 /*
  * threadexec_log
