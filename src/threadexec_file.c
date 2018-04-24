@@ -10,16 +10,49 @@ extern int fileport_makefd(mach_port_t port);
 
 bool
 threadexec_file_insert(threadexec_t threadexec, int local_fd, int *remote_fd) {
-	ERROR("NOT IMPLEMENTED");
-	return false;
+	// Create a fileport in the local task representing the file descriptor.
+	mach_port_t fileport;
+	int err = fileport_makeport(local_fd, &fileport);
+	if (err != 0) {
+		ERROR_CALL(fileport_makeport, "%d", err);
+		return false;
+	}
+	// Transfer the fileport (which is a send right) to the threadexec task.
+	mach_port_t fileport_r;
+	bool ok = threadexec_mach_port_insert(threadexec, fileport, &fileport_r,
+			MACH_MSG_TYPE_MOVE_SEND);
+	if (!ok) {
+		ERROR("Could not move fileport to remote task");
+		mach_port_deallocate(mach_task_self(), fileport);
+		return false;
+	}
+	// Create a file descriptor from the fileport in the threadexec process.
+	int fd_r;
+	ok = threadexec_call_cv(threadexec, &fd_r, sizeof(fd_r),
+			fileport_makefd, 1,
+			TX_CARG_LITERAL(mach_port_t, fileport_r));
+	// Deallocate the fileport.
+	threadexec_mach_port_deallocate(threadexec, fileport_r);
+	// Do error checking for fileport_makefd().
+	if (!ok) {
+		ERROR_REMOTE_CALL(fileport_makefd);
+		return false;
+	}
+	if (fd_r < 0) {
+		ERROR("Could not create file descriptor from fileport");
+		return false;
+	}
+	// Success!
+	*remote_fd = fd_r;
+	return true;
 }
 
 bool
 threadexec_file_extract(threadexec_t threadexec, int remote_fd, int *local_fd) {
 	// Create a fileport in the remote task representing the file descriptor.
 	mach_port_t fileport_r;
-	int ret;
-	bool ok = threadexec_call_cv(threadexec, &ret, sizeof(ret),
+	int err;
+	bool ok = threadexec_call_cv(threadexec, &err, sizeof(err),
 			fileport_makeport, 2,
 			TX_CARG_LITERAL(int, remote_fd),
 			TX_CARG_PTR_LITERAL_OUT(mach_port_t *, &fileport_r));
@@ -27,8 +60,8 @@ threadexec_file_extract(threadexec_t threadexec, int remote_fd, int *local_fd) {
 		ERROR_REMOTE_CALL(fileport_makeport);
 		return false;
 	}
-	if (ret != 0) {
-		ERROR_REMOTE_CALL_FAIL(fileport_makeport, "%u", ret);
+	if (err != 0) {
+		ERROR_REMOTE_CALL_FAIL(fileport_makeport, "%d", err);
 		return false;
 	}
 	// Transfer the fileport (which is a send right) to us.
@@ -89,10 +122,19 @@ return_fds:
 	// If we don't want the remote file or if we encountered an error, close the remote file.
 	if (remote_fd == NULL) {
 fail_1:
-		threadexec_call_cv(threadexec, NULL, 0,
-				close, 1,
-				TX_CARG_LITERAL(int, fd_r));
+		threadexec_file_close(threadexec, fd_r);
 	}
 fail_0:
+	return ok;
+}
+
+bool
+threadexec_file_close(threadexec_t threadexec, int remote_fd) {
+	bool ok = threadexec_call_cv(threadexec, NULL, 0,
+				close, 1,
+				TX_CARG_LITERAL(int, remote_fd));
+	if (!ok) {
+		ERROR_REMOTE_CALL(close);
+	}
 	return ok;
 }

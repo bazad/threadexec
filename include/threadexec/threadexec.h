@@ -651,6 +651,21 @@ bool threadexec_file_open(threadexec_t threadexec, const char *path, int oflags,
 		int *remote_fd, int *local_fd);
 
 /*
+ * threadexec_file_close
+ *
+ * Description:
+ * 	Close a file descriptor in a threadexec process.
+ *
+ * Parameters:
+ * 	threadexec			The threadexec context.
+ * 	remote_fd			The remote file descriptor to close.
+ *
+ * Returns:
+ * 	Returns true on success.
+ */
+bool threadexec_file_close(threadexec_t threadexec, int remote_fd);
+
+/*
  * threadexec_log
  *
  * Description:
