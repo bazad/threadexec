@@ -23,6 +23,7 @@ init_with_thread(threadexec_t threadexec) {
 	// Perform pthread setup if this is a bare thread.
 	bool ok;
 	if (threadexec->flags & TX_BARE_THREAD) {
+		// We assume the thread already has an initialized stack.
 		ok = tx_pthread_init_bare_thread(threadexec);
 		if (!ok) {
 			goto fail;
