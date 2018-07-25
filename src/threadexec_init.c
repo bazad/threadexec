@@ -14,7 +14,46 @@
 	(TX_KILL_THREAD | TX_KILL_TASK)
 
 #define SUPPORTED_FLAGS	\
-	(KILL_FLAGS | TX_SUSPEND | TX_RESUME | TX_BORROW_PORTS | TX_BARE_THREAD)
+	(TX_SUSPEND_THREADS | KILL_FLAGS | TX_SUSPEND | TX_RESUME | TX_BORROW_PORTS \
+	 | TX_BARE_THREAD)
+
+// Suspend all the threads in a task, except for the specified one.
+static bool
+suspend_all_threads_except(task_t task, thread_t except) {
+	bool success = false;
+	// First suspend the task so that it won't create any more threads.
+	kern_return_t kr = task_suspend(task);
+	if (kr != KERN_SUCCESS) {
+		DEBUG_TRACE(1, "Could not suspend task 0x%x: %u", task, kr);
+		goto fail_0;
+	}
+	// Get a list of all the threads.
+	thread_act_array_t threads;
+	mach_msg_type_number_t count;
+	kr = task_threads(task, &threads, &count);
+	if (kr != KERN_SUCCESS) {
+		DEBUG_TRACE(1, "Could not get threads of task 0x%x: %u", task, kr);
+		goto fail_1;
+	}
+	// Suspend all the threads and clean up resources.
+	for (size_t i = 0; i < count; i++) {
+		if (threads[i] != except) {
+			thread_suspend(threads[i]);
+		}
+		mach_port_deallocate(mach_task_self(), threads[i]);
+	}
+	mach_vm_deallocate(mach_task_self(), (mach_vm_address_t) threads,
+			count * sizeof(*threads));
+	success = true;
+fail_1:
+	// Resume the task.
+	kr = task_resume(task);
+	if (kr != KERN_SUCCESS) {
+		DEBUG_TRACE(1, "Could not resume task 0x%x: %u", task, kr);
+	}
+fail_0:
+	return success;
+}
 
 bool
 tx_init_internal(threadexec_t threadexec) {
@@ -88,6 +127,11 @@ threadexec_init(task_t task, thread_t thread, tx_create_flags_t flags) {
 	if (thread != MACH_PORT_NULL && (flags & KILL_FLAGS) == 0) {
 		flags |= TX_PRESERVE;
 	}
+	// If TX_SUSPEND_THREADS was specified, suspend all the other threads in the task. We do
+	// this here because it should only happen once.
+	if (flags & TX_SUSPEND_THREADS) {
+		suspend_all_threads_except(task, thread);
+	}
 	// Create the basic threadexec.
 	threadexec_t threadexec = calloc(1, sizeof(*threadexec));
 	assert(threadexec != NULL);
@@ -110,10 +154,20 @@ kill_threads(task_t task) {
 	mach_msg_type_number_t count;
 	kern_return_t kr = task_threads(task, &threads, &count);
 	if (kr != KERN_SUCCESS) {
+		DEBUG_TRACE(2, "Could not get threads of task 0x%x: %u", task, kr);
 		return false;
 	}
 	for (size_t i = 0; i < count; i++) {
-		thread_terminate(threads[i]);
+		kr = thread_abort(threads[i]);
+		if (kr != KERN_SUCCESS) {
+			DEBUG_TRACE(2, "Could not abort thread 0x%x of task 0x%x: %u",
+					threads[i], task, kr);
+		}
+		kr = thread_terminate(threads[i]);
+		if (kr != KERN_SUCCESS) {
+			DEBUG_TRACE(2, "Could not terminate thread 0x%x of task 0x%x: %u",
+					threads[i], task, kr);
+		}
 		mach_port_deallocate(mach_task_self(), threads[i]);
 	}
 	mach_vm_deallocate(mach_task_self(), (mach_vm_address_t) threads,
@@ -143,8 +197,9 @@ threadexec_deinit(threadexec_t threadexec) {
 		DEBUG_TRACE(2, "%s: Terminating task 0x%x", __func__, threadexec->task);
 		kern_return_t kr = task_terminate(threadexec->task);
 		if (kr != KERN_SUCCESS) {
-			kill_threads(threadexec->task);
+			DEBUG_TRACE(2, "Could not terminate task 0x%x: %u", threadexec->task, kr);
 		}
+		kill_threads(threadexec->task);
 	} else if (threadexec->flags & TX_KILL_THREAD) {
 		DEBUG_TRACE(2, "%s: Terminating thread 0x%x", __func__, threadexec->thread);
 		thread_terminate(threadexec->thread);

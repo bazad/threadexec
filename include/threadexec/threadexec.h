@@ -138,7 +138,8 @@ struct threadexec_call_c_argument {
 
 // The threadexec_init() creation flags.
 enum {
-	// Have threadexec_init() suspend all other threads in the task. TODO: Not implemented.
+	// Have threadexec_init() suspend all other threads in the task. These threads are not
+	// automatically resumed.
 	TX_SUSPEND_THREADS    = 0x1,
 	// Kill the target thread when threadexec_deinit() is called. The state of the target
 	// thread is not preserved.

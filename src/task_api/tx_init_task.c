@@ -1,5 +1,6 @@
 #include "task_api/tx_init_task.h"
 
+#include "tx_call.h"
 #include "tx_init_shmem.h"
 #include "tx_internal.h"
 #include "tx_log.h"
@@ -115,6 +116,27 @@ initialize_local_port(threadexec_t threadexec) {
 	return true;
 }
 
+// Get the remote names (task_remote and thread_remote) for the task and thread ports.
+static bool
+find_remote_port_names(threadexec_t threadexec) {
+	// We will just assume that the remote task's own task port name is the same as ours. This
+	// is pretty much always the case: it should have the value 0x103.
+	threadexec->task_remote = mach_task_self();
+	// We can get the remote thread's name for itself by doing a remote call to
+	// mach_thread_self().
+	mach_port_t thread_remote;
+	bool ok = tx_call_regs(threadexec, &thread_remote, sizeof(thread_remote),
+		(word_t)mach_thread_self, 0, NULL);
+	if (!ok) {
+		ERROR_REMOTE_CALL(mach_thread_self);
+		return false;
+	}
+	threadexec->thread_remote = thread_remote;
+	// We will leave the additional reference on the thread name so that even if this isn't a
+	// pthread the name is stable.
+	return true;
+}
+
 bool
 tx_init_with_task_api(threadexec_t threadexec) {
 	// Make sure we have a thread port. TODO: We should probably initialize pthread state too!
@@ -147,6 +169,11 @@ tx_init_with_task_api(threadexec_t threadexec) {
 	// Now set up the local Mach port. We need to do this after we initialize the shared memory
 	// region because it relies on function calling.
 	ok = initialize_local_port(threadexec);
+	if (!ok) {
+		goto fail_1;
+	}
+	// Finally get our port names for task_remote and thread_remote.
+	ok = find_remote_port_names(threadexec);
 	if (!ok) {
 		goto fail_1;
 	}
